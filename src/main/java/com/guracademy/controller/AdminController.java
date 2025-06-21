@@ -7,10 +7,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -21,9 +20,15 @@ public class AdminController {
 
     private final AdminService adminService;
 
-    @PostMapping
+    @PostMapping("/createAdminProfile")
     public ResponseEntity<AdminResponseDTO> createAdminProfile(@RequestBody AdminDTO requestDTO) {
         AdminResponseDTO responseDTO = adminService.saveAdmin(requestDTO);
+        return ResponseEntity.ok(responseDTO);
+    }
+
+    @GetMapping("/{adminId}")
+    public ResponseEntity<AdminResponseDTO> getAdminProfile(@PathVariable UUID adminId) {
+        AdminResponseDTO responseDTO = adminService.getAdminById(adminId);
         return ResponseEntity.ok(responseDTO);
     }
 }

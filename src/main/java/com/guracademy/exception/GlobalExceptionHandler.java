@@ -22,5 +22,9 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(errors); // Returns HTTP 400 Bad Request
     }
 
+    @ExceptionHandler(AdminNotFoundException.class)
+    public ResponseEntity<String> handleAdminNotFoundException(AdminNotFoundException ex) {
+        return ResponseEntity.status(404).body(ex.getMessage()); // Returns HTTP 404 Not Found
+    }
 
 }

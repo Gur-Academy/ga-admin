@@ -4,6 +4,7 @@ import com.common.util.PasswordUtil;
 import com.guracademy.dto.AdminDTO;
 import com.guracademy.dto.AdminResponseDTO;
 import com.guracademy.entity.Admin;
+import com.guracademy.exception.AdminNotFoundException;
 import com.guracademy.repository.AdminRepository;
 import com.guracademy.service.AdminService;
 import lombok.RequiredArgsConstructor;
@@ -39,5 +40,14 @@ public class AdminServiceImpl implements AdminService {
 
             // Now map back to response DTO that doesn't include password
             return modelMapper.map(savedAdmin, AdminResponseDTO.class);
+    }
+
+    @Override
+    public AdminResponseDTO getAdminById(UUID adminId) {
+        Admin admin = adminRepository.findById(adminId)
+                .orElseThrow(() -> new AdminNotFoundException(adminId));
+        
+        logger.info("Retrieved admin profile with ID: " + adminId);
+        return modelMapper.map(admin, AdminResponseDTO.class);
     }
 }
