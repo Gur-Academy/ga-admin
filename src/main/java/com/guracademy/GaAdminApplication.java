@@ -1,4 +1,4 @@
-package com.guracademy.GaAdmin;
+package com.guracademy;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
