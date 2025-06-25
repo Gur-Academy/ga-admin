@@ -4,6 +4,6 @@ import java.util.UUID;
 
 public class AdminNotFoundException extends RuntimeException{
     public AdminNotFoundException(UUID adminId) {
-        super("Admin with ID " + adminId + " not found");
+        super("Admin with ID " + adminId + " not found.");
     }
 }
