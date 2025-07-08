@@ -6,7 +6,6 @@ pipeline {
             steps {
                 echo 'Starting checkout...'
                 checkout scm
-                echo 'Checkout completed'
                 sh 'pwd'
                 sh 'ls -la'
             }
@@ -35,10 +34,7 @@ pipeline {
                 withEnv([
                     "JAVA_HOME=${tool 'jdk-21'}",
                     "MAVEN_HOME=${tool 'maven3'}",
-                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
-                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
-                    "REPO_OWNER=Gur-Academy",
-                    "REPO_NAME=ga-admin"
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}"
                 ]) {
                     sh "${MAVEN_HOME}/bin/mvn clean install -DskipTests"
                     echo 'Build completed'
@@ -52,10 +48,7 @@ pipeline {
                 withEnv([
                     "JAVA_HOME=${tool 'jdk-21'}",
                     "MAVEN_HOME=${tool 'maven3'}",
-                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
-                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
-                    "REPO_OWNER=Gur-Academy",
-                    "REPO_NAME=ga-admin"
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}"
                 ]) {
                     sh "${MAVEN_HOME}/bin/mvn test"
                     echo 'Tests completed'
@@ -69,10 +62,7 @@ pipeline {
                 withEnv([
                     "JAVA_HOME=${tool 'jdk-21'}",
                     "MAVEN_HOME=${tool 'maven3'}",
-                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
-                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
-                    "REPO_OWNER=Gur-Academy",
-                    "REPO_NAME=ga-admin"
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}"
                 ]) {
                     sh "${MAVEN_HOME}/bin/mvn package"
                     echo 'Package completed'
@@ -84,9 +74,6 @@ pipeline {
             steps {
                 echo 'Starting PR notification...'
                 withEnv([
-                    "JAVA_HOME=${tool 'jdk-21'}",
-                    "MAVEN_HOME=${tool 'maven3'}",
-                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
                     "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
                     "REPO_OWNER=Gur-Academy",
                     "REPO_NAME=ga-admin"
@@ -116,13 +103,11 @@ pipeline {
             }
         }
     }
+
     post {
         always {
-            node {
-                echo 'Cleaning up workspace...'
-                deleteDir()
-            }
+            echo 'Cleaning up workspace...'
+            deleteDir()
         }
     }
-
 }
