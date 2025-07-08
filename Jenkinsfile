@@ -1,17 +1,33 @@
 pipeline {
     agent any
 
-    environment {
-        JAVA_HOME = tool 'jdk-21'
-        MAVEN_HOME = tool 'maven3'
-        PATH = "${JAVA_HOME}/bin:${env.PATH}"
-        GITHUB_TOKEN = credentials('jenkins-cicd')
-        REPO_OWNER = 'Gur-Academy'
-        REPO_NAME = 'ga-admin'
-    }
-
     stages {
         stage('Checkout Code') {
+            steps {
+                echo 'Starting checkout...'
+                checkout scm
+                echo 'Checkout completed'
+                sh 'pwd'
+                sh 'ls -la'
+            }
+        }
+
+        stage('Set Environment') {
+            steps {
+                withEnv([
+                    "JAVA_HOME=${tool 'jdk-21'}",
+                    "MAVEN_HOME=${tool 'maven3'}",
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
+                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
+                    "REPO_OWNER=Gur-Academy",
+                    "REPO_NAME=ga-admin"
+                ]) {
+                    echo "Environment variables set"
+                    echo "JAVA_HOME: ${env.JAVA_HOME}"
+                    echo "MAVEN_HOME: ${env.MAVEN_HOME}"
+                }
+            }
+        }
             steps {
                 echo 'Starting checkout...'
                 checkout scm
@@ -24,31 +40,66 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Starting build...'
-                sh "${MAVEN_HOME}/bin/mvn clean install -DskipTests"
-                echo 'Build completed'
+                withEnv([
+                    "JAVA_HOME=${tool 'jdk-21'}",
+                    "MAVEN_HOME=${tool 'maven3'}",
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
+                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
+                    "REPO_OWNER=Gur-Academy",
+                    "REPO_NAME=ga-admin"
+                ]) {
+                    sh "${MAVEN_HOME}/bin/mvn clean install -DskipTests"
+                    echo 'Build completed'
+                }
             }
         }
 
         stage('Run Tests') {
             steps {
                 echo 'Starting tests...'
-                sh "${MAVEN_HOME}/bin/mvn test"
-                echo 'Tests completed'
+                withEnv([
+                    "JAVA_HOME=${tool 'jdk-21'}",
+                    "MAVEN_HOME=${tool 'maven3'}",
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
+                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
+                    "REPO_OWNER=Gur-Academy",
+                    "REPO_NAME=ga-admin"
+                ]) {
+                    sh "${MAVEN_HOME}/bin/mvn test"
+                    echo 'Tests completed'
+                }
             }
         }
 
         stage('Package') {
             steps {
                 echo 'Starting package...'
-                sh "${MAVEN_HOME}/bin/mvn package"
-                echo 'Package completed'
+                withEnv([
+                    "JAVA_HOME=${tool 'jdk-21'}",
+                    "MAVEN_HOME=${tool 'maven3'}",
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
+                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
+                    "REPO_OWNER=Gur-Academy",
+                    "REPO_NAME=ga-admin"
+                ]) {
+                    sh "${MAVEN_HOME}/bin/mvn package"
+                    echo 'Package completed'
+                }
             }
         }
 
         stage('Notify PR Status') {
             steps {
                 echo 'Starting PR notification...'
-                script {
+                withEnv([
+                    "JAVA_HOME=${tool 'jdk-21'}",
+                    "MAVEN_HOME=${tool 'maven3'}",
+                    "PATH=${tool 'jdk-21'}/bin:${env.PATH}",
+                    "GITHUB_TOKEN=${credentials('jenkins-cicd')}",
+                    "REPO_OWNER=Gur-Academy",
+                    "REPO_NAME=ga-admin"
+                ]) {
+                    script {
                     def commitSha = sh(
                         script: "git rev-parse HEAD",
                         returnStdout: true
