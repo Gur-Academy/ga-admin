@@ -13,30 +13,41 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
+                echo 'Starting checkout...'
                 checkout scm
+                echo 'Checkout completed'
+                sh 'pwd'
+                sh 'ls -la'
             }
         }
 
         stage('Build') {
             steps {
+                echo 'Starting build...'
                 sh "${MAVEN_HOME}/bin/mvn clean install -DskipTests"
+                echo 'Build completed'
             }
         }
 
         stage('Run Tests') {
             steps {
+                echo 'Starting tests...'
                 sh "${MAVEN_HOME}/bin/mvn test"
+                echo 'Tests completed'
             }
         }
 
         stage('Package') {
             steps {
+                echo 'Starting package...'
                 sh "${MAVEN_HOME}/bin/mvn package"
+                echo 'Package completed'
             }
         }
 
         stage('Notify PR Status') {
             steps {
+                echo 'Starting PR notification...'
                 script {
                     def commitSha = sh(
                         script: "git rev-parse HEAD",
