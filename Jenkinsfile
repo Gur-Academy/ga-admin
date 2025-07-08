@@ -64,9 +64,7 @@ pipeline {
 
     post {
         always {
-            script {
-                deleteDir()
-            }
+            cleanWs()
         }
     }
 }
