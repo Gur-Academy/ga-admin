@@ -64,8 +64,11 @@ pipeline {
 
     post {
         always {
-            echo "Cleaning up workspac"
-            cleanWs()
+            node {
+                echo "Cleaning up workspace"
+                cleanWs()
+            }
         }
     }
+
 }
