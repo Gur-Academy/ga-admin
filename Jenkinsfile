@@ -78,8 +78,11 @@ pipeline {
 
     post {
         always {
-            echo 'Cleaning up workspace...'
-            deleteDir()
+            node {
+                echo 'Cleaning up workspace...'
+                deleteDir()
+            }
         }
     }
+
 }
