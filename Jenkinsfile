@@ -28,14 +28,6 @@ pipeline {
                 }
             }
         }
-            steps {
-                echo 'Starting checkout...'
-                checkout scm
-                echo 'Checkout completed'
-                sh 'pwd'
-                sh 'ls -la'
-            }
-        }
 
         stage('Build') {
             steps {
