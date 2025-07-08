@@ -116,4 +116,13 @@ pipeline {
             }
         }
     }
+    post {
+        always {
+            node {
+                echo 'Cleaning up workspace...'
+                deleteDir()
+            }
+        }
+    }
+
 }
