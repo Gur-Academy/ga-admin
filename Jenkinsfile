@@ -64,9 +64,7 @@ pipeline {
 
     post {
         always {
-            node('Built-In Node') {
-                deleteDir()
-            }
+            deleteDir()
         }
     }
 }
