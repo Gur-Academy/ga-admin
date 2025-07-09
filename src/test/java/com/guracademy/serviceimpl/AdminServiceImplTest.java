@@ -107,8 +107,10 @@ class AdminServiceImplTest {
         when(adminRepository.findById(invalidAdminId)).thenReturn(java.util.Optional.empty());
 
         // When & Then
-        assertThrows(AdminNotFoundException.class,
+        AdminNotFoundException exception = assertThrows(AdminNotFoundException.class,
                 () -> adminService.getAdminById(invalidAdminId));
+        
+        assertEquals("Admin with ID " + invalidAdminId + " not found", exception.getMessage());
         verify(adminRepository).findById(invalidAdminId);
     }
 }
