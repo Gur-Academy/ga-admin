@@ -11,7 +11,6 @@ exports.createAdminProfile = async (req, res) => {
       email: email_id,
       password: password,
       email_confirm: true,
-      phone: phone
     });
 
     if (authError) {
