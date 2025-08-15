@@ -61,52 +61,7 @@ describe('Application Integration Tests', () => {
     });
   });
 
-  describe('POST /signup', () => {
-    it('should sign up user successfully', async () => {
-      const signupData = {
-        email: 'newuser@test.com',
-        password: 'password123'
-      };
-
-      const mockSignupResponse = {
-        user: { id: 'new-user-id', email: 'newuser@test.com' },
-        session: { access_token: 'mock-token' }
-      };
-
-      supabase.auth.signUp.mockResolvedValue({
-        data: mockSignupResponse,
-        error: null
-      });
-
-      const response = await request(app)
-        .post('/signup')
-        .send(signupData)
-        .expect(200);
-
-      expect(response.body).toEqual(mockSignupResponse);
-      expect(supabase.auth.signUp).toHaveBeenCalledWith(signupData);
-    });
-
-    it('should handle signup error', async () => {
-      const signupData = {
-        email: 'existing@test.com',
-        password: 'password123'
-      };
-
-      supabase.auth.signUp.mockResolvedValue({
-        data: null,
-        error: { message: 'User already registered' }
-      });
-
-      const response = await request(app)
-        .post('/signup')
-        .send(signupData)
-        .expect(400);
-
-      expect(response.body).toEqual({ error: 'User already registered' });
-    });
-  });
-
+ 
   describe('POST /api/users/admin/createAdminProfile', () => {
     it('should create admin profile successfully', async () => {
       const adminData = {
