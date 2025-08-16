@@ -3,7 +3,7 @@ const express = require('express');
 const pool = require('./config/db');
 const supabase = require('./config/supabase');
 const app = express();
-
+const adminRoutes = require('./routes/adminRoutes');
 // Middleware
 app.use(express.json());
 
@@ -11,6 +11,7 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.send('Welcome to Gur Academy Admin API');
 });
+app.use('/api/users/admin', adminRoutes);
 
 // Direct DB query (fast, IPv4)
 app.get('/users', async (req, res) => {
