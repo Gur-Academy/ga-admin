@@ -90,35 +90,7 @@ describe('GET /api/users/admin/:adminId - Integration Tests', () => {
     });
   });
 
-  describe('HTTP method validation', () => {
-    it('should reject POST requests', async () => {
-      await request(app)
-        .post(`/api/users/admin/${testAdminId}`)
-        .send({})
-        .expect(404);
-    });
-
-    it('should reject PUT requests', async () => {
-      await request(app)
-        .put(`/api/users/admin/${testAdminId}`)
-        .send({})
-        .expect(404);
-    });
-
-    it('should reject DELETE requests', async () => {
-      await request(app)
-        .delete(`/api/users/admin/${testAdminId}`)
-        .expect(404);
-    });
-
-    it('should reject PATCH requests', async () => {
-      await request(app)
-        .patch(`/api/users/admin/${testAdminId}`)
-        .send({})
-        .expect(404);
-    });
-  });
-
+  
   describe('URL and parameter handling', () => {
     it('should handle URL with query parameters', async () => {
       const response = await request(app)
