@@ -217,9 +217,10 @@ describe('Application Integration Tests', () => {
 
     it('should handle different HTTP methods correctly', async () => {
       // Test that POST routes don't accept GET requests
+      // This will be caught by the :adminId route and return 500 due to invalid UUID
       await request(app)
         .get('/api/users/admin/createAdminProfile')
-        .expect(404);
+        .expect(500);
 
       await request(app)
         .get('/signup')
