@@ -45,3 +45,25 @@ exports.createAdminProfile = async (req, res) => {
     return res.status(500).json({ error: 'Internal Server Error' });
   }
 };
+
+// Get admin by ID
+exports.getAdminById = async (req, res) => {
+  const { adminId } = req.params || {};
+
+  try {
+    const adminResult = await pool.query(
+      `SELECT * FROM admins WHERE admin_id = $1`,
+      [adminId]
+    );
+
+    if (adminResult.rows.length === 0) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    res.status(200).json(adminResult.rows[0]);
+
+  } catch (err) {
+    console.error("Error fetching admin by ID:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+};
