@@ -1,12 +1,26 @@
 // routes/adminRoutes.js
 const express = require('express');
 const router = express.Router();
-const { createAdminProfile, getAdminById } = require('../controller/adminController');
+const { createAdminProfile, getAdminById, login } = require('../controller/adminController');
+const { verifyJWT, requireAdmin } = require('../middleware/authMiddleware');
 
-// POST /api/users/admins/createAdminProfile
+// POST /api/users/admin/login - Admin login with Supabase JWT
+router.post('/login', login);
+
+// GET /api/users/admin/login - Should return 401 (protected route)
+router.get('/login', verifyJWT, requireAdmin, (req, res) => {
+  res.status(200).json({ message: 'Login endpoint - use POST method' });
+});
+
+// POST /api/users/admin/createAdminProfile - No auth required for initial admin setup
 router.post('/createAdminProfile', createAdminProfile);
 
-// GET /api/users/admins/:adminId
-router.get('/:adminId', getAdminById);
+// Test endpoint to verify no auth issues
+router.post('/test', (req, res) => {
+  res.json({ message: 'Test endpoint working', body: req.body });
+});
+
+// GET /api/users/admin/:adminId
+router.get('/:adminId', verifyJWT, requireAdmin, getAdminById);
 
 module.exports = router;

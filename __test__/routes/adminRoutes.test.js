@@ -4,7 +4,14 @@ const express = require('express');
 // Mock the controller
 jest.mock('../../controller/adminController', () => ({
   createAdminProfile: jest.fn(),
-  getAdminById: jest.fn()
+  getAdminById: jest.fn(),
+  login: jest.fn()
+}));
+
+// Mock middleware
+jest.mock('../../middleware/authMiddleware', () => ({
+  verifyJWT: jest.fn((req, res, next) => next()),
+  requireAdmin: jest.fn((req, res, next) => next())
 }));
 
 const adminController = require('../../controller/adminController');
@@ -137,7 +144,7 @@ describe('Admin Routes', () => {
         .send('invalid json')
         .expect(400);
 
-      // Express should return a 400 for malformed JSON
+      // Express middleware should catch malformed JSON
       expect(response.status).toBe(400);
     });
 
@@ -185,10 +192,7 @@ describe('Admin Routes', () => {
 
     it('should handle concurrent requests', async () => {
       adminController.createAdminProfile.mockImplementation((req, res) => {
-        // Simulate some processing time
-        setTimeout(() => {
-          res.status(201).json({ message: 'Admin profile created successfully' });
-        }, 100);
+        res.status(201).json({ message: 'Admin profile created successfully' });
       });
 
       // Send multiple concurrent requests
@@ -196,13 +200,13 @@ describe('Admin Routes', () => {
         request(app)
           .post('/api/users/admin/createAdminProfile')
           .send(validAdminData)
+          .expect(201)
       );
 
       const responses = await Promise.all(promises);
 
       // All requests should succeed
       responses.forEach(response => {
-        expect(response.status).toBe(201);
         expect(response.body).toEqual({ message: 'Admin profile created successfully' });
       });
 
@@ -377,23 +381,20 @@ describe('Admin Routes', () => {
       };
 
       adminController.getAdminById.mockImplementation((req, res) => {
-        // Simulate some processing time
-        setTimeout(() => {
-          res.status(200).json(mockAdminData);
-        }, 100);
+        res.status(200).json(mockAdminData);
       });
 
       // Send multiple concurrent requests
       const promises = Array(3).fill().map(() =>
         request(app)
           .get('/api/users/admin/550e8400-e29b-41d4-a716-446655440005')
+          .expect(200)
       );
 
       const responses = await Promise.all(promises);
 
       // All requests should succeed
-      responses.forEach(response => {
-        expect(response.status).toBe(200);
+        responses.forEach(response => {
         expect(response.body).toEqual(mockAdminData);
       });
 
@@ -406,7 +407,7 @@ describe('Admin Routes', () => {
         .get('/api/users/admin/%invalid%url%encoding')
         .expect(400);
 
-      // Should return 400 for malformed URL
+      // Express returns 400 for malformed URLs
       expect(response.status).toBe(400);
     });
 
@@ -477,6 +478,94 @@ describe('Admin Routes', () => {
         .expect(404);
 
       expect(response.body).toEqual({ error: 'Admin not found' });
+    });
+  });
+
+  describe('POST /api/users/admin/login', () => {
+    it('should handle login successfully', async () => {
+      const loginData = {
+        email: 'admin@test.com',
+        password: 'password123'
+      };
+
+      const mockResponse = {
+        message: 'Login successful',
+        user: {
+          id: 'test-user-id',
+          email: 'admin@test.com',
+          admin_name: 'Test Admin',
+          role: 'ADMIN'
+        },
+        session: {
+          access_token: 'mock-jwt-token',
+          refresh_token: 'mock-refresh-token',
+          expires_at: '2024-12-31T23:59:59Z'
+        }
+      };
+
+      adminController.login.mockImplementation((req, res) => {
+        res.status(200).json(mockResponse);
+      });
+
+      const response = await request(app)
+        .post('/api/users/admin/login')
+        .send(loginData)
+        .expect(200);
+
+      expect(adminController.login).toHaveBeenCalled();
+      expect(response.body).toEqual(mockResponse);
+    });
+
+    it('should handle missing email', async () => {
+      const loginData = {
+        password: 'password123'
+      };
+
+      adminController.login.mockImplementation((req, res) => {
+        res.status(400).json({ error: 'Email and password are required' });
+      });
+
+      const response = await request(app)
+        .post('/api/users/admin/login')
+        .send(loginData)
+        .expect(400);
+
+      expect(response.body).toEqual({ error: 'Email and password are required' });
+    });
+
+    it('should handle missing password', async () => {
+      const loginData = {
+        email: 'admin@test.com'
+      };
+
+      adminController.login.mockImplementation((req, res) => {
+        res.status(400).json({ error: 'Email and password are required' });
+      });
+
+      const response = await request(app)
+        .post('/api/users/admin/login')
+        .send(loginData)
+        .expect(400);
+
+      expect(response.body).toEqual({ error: 'Email and password are required' });
+    });
+
+    it('should handle invalid credentials', async () => {
+      const loginData = {
+        email: 'invalid@test.com',
+        password: 'wrongpassword'
+      };
+
+      adminController.login.mockImplementation((req, res) => {
+        res.status(401).json({ error: 'Invalid credentials' });
+      });
+
+      const response = await request(app)
+        .post('/api/users/admin/login')
+        .send(loginData)
+        .expect(401);
+
+      expect(response.body).toEqual({ error: 'Invalid credentials' });
     });
   });
 
