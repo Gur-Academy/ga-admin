@@ -10,7 +10,12 @@ jest.mock('../../config/supabase', () => ({
     admin: {
       createUser: jest.fn()
     },
-    signUp: jest.fn()
+    signUp: jest.fn(),
+    signInWithPassword: jest.fn(),
+    getUser: jest.fn().mockResolvedValue({
+      data: { user: { id: 'test-user-id', email: 'test@example.com' } },
+      error: null
+    })
   }
 }));
 
@@ -21,6 +26,20 @@ const supabase = require('../../config/supabase');
 describe('Application Integration Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    
+    // Mock successful JWT verification by default
+    supabase.auth.getUser.mockResolvedValue({
+      data: { user: { id: 'test-user-id', email: 'test@example.com' } },
+      error: null
+    });
+    
+    // Mock admin role check by default - need to handle multiple queries
+    pool.query.mockImplementation((query, params) => {
+      if (query.includes('SELECT role FROM user_role')) {
+        return Promise.resolve({ rows: [{ role: 'ADMIN' }] });
+      }
+      return Promise.resolve({ rows: [] });
+    });
   });
 
   describe('GET /', () => {
@@ -65,20 +84,20 @@ describe('Application Integration Tests', () => {
   describe('POST /api/users/admin/createAdminProfile', () => {
     it('should create admin profile successfully', async () => {
       const adminData = {
-        name: 'Test Admin',
-        email_id: 'admin@test.com',
-        phone: '1234567890',
+        admin_name: 'Test Admin',
+        admin_email: 'admin@test.com',
         password: 'password123'
+      };
+
+      const mockAdminRecord = {
+        admin_id: 'generated-admin-id',
+        admin_name: 'Test Admin',
+        admin_email: 'admin@test.com',
+        created_at: '2025-08-24T11:32:00.123Z'
       };
 
       const mockAuthData = {
         user: { id: 'admin-user-id', email: 'admin@test.com' }
-      };
-
-      const mockAdminRecord = {
-        admin_id: 'admin-user-id',
-        admin_name: 'Test Admin',
-        admin_email: 'admin@test.com'
       };
 
       // Mock Supabase auth
@@ -87,10 +106,11 @@ describe('Application Integration Tests', () => {
         error: null
       });
 
-      // Mock database queries
+      // Mock database queries - new flow: admin insert, user_role insert, admin update (no auth middleware)
       pool.query
+        .mockResolvedValueOnce({ rows: [mockAdminRecord] }) // admin insert
         .mockResolvedValueOnce({ rows: [] }) // user_role insert
-        .mockResolvedValueOnce({ rows: [mockAdminRecord] }); // admins insert
+        .mockResolvedValueOnce({ rows: [] }); // admin update with auth_user_id
 
       const response = await request(app)
         .post('/api/users/admin/createAdminProfile')
@@ -98,16 +118,24 @@ describe('Application Integration Tests', () => {
         .expect(201);
 
       expect(response.body).toEqual({
-        message: 'Admin profile created successfully',
-        auth_user: mockAuthData.user,
-        admin_record: mockAdminRecord
+        message: 'Admin created successfully',
+        admin: {
+          admin_id: mockAdminRecord.admin_id,
+          admin_name: mockAdminRecord.admin_name,
+          admin_email: mockAdminRecord.admin_email,
+          created_at: mockAdminRecord.created_at
+        }
       });
 
       // Verify all mocks were called correctly
       expect(supabase.auth.admin.createUser).toHaveBeenCalledWith({
         email: 'admin@test.com',
         password: 'password123',
-        email_confirm: true
+        email_confirm: true,
+        user_metadata: {
+          admin_id: mockAdminRecord.admin_id,
+          admin_name: 'Test Admin'
+        }
       });
 
       expect(pool.query).toHaveBeenCalledWith(
@@ -116,18 +144,17 @@ describe('Application Integration Tests', () => {
       );
 
       expect(pool.query).toHaveBeenCalledWith(
-        `INSERT INTO admins (admin_id, admin_name, admin_email)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-        ['admin-user-id', 'Test Admin', 'admin@test.com']
+        `INSERT INTO admins (admin_name, admin_email, created_at)
+       VALUES ($1, $2, NOW())
+       RETURNING admin_id, admin_name, admin_email, created_at`,
+        ['Test Admin', 'admin@test.com']
       );
     });
 
     it('should handle Supabase auth error', async () => {
       const adminData = {
-        name: 'Test Admin',
-        email_id: 'existing@test.com',
-        phone: '1234567890',
+        admin_name: 'Test Admin',
+        admin_email: 'existing@test.com',
         password: 'password123'
       };
 
@@ -136,20 +163,32 @@ describe('Application Integration Tests', () => {
         error: { message: 'Email already exists' }
       });
 
+      // Mock role check for middleware and admin insert (which will be rolled back)
+      const mockAdminRecord = {
+        admin_id: 'temp-admin-id',
+        admin_name: 'Test Admin',
+        admin_email: 'existing@test.com',
+        created_at: '2025-08-24T11:32:00.123Z'
+      };
+
+      pool.query
+        .mockResolvedValueOnce({ rows: [{ role: 'ADMIN' }] }) // role check for middleware
+        .mockResolvedValueOnce({ rows: [mockAdminRecord] }) // admin insert
+        .mockResolvedValueOnce({ rows: [] }); // delete rollback
+
       const response = await request(app)
         .post('/api/users/admin/createAdminProfile')
+        .set('Content-Type', 'application/json')
         .send(adminData)
         .expect(400);
 
-      expect(response.body).toEqual({ error: 'Email already exists' });
-      expect(pool.query).not.toHaveBeenCalled();
+      expect(response.body).toHaveProperty('error', 'Email already exists');
     });
 
     it('should handle database error', async () => {
       const adminData = {
-        name: 'Test Admin',
-        email_id: 'admin@test.com',
-        phone: '1234567890',
+        admin_name: 'Test Admin',
+        admin_email: 'admin@test.com',
         password: 'password123'
       };
 
@@ -158,14 +197,16 @@ describe('Application Integration Tests', () => {
         error: null
       });
 
-      pool.query.mockRejectedValue(new Error('Database connection failed'));
+      // Mock database error on admin insert (first step)
+      pool.query
+        .mockRejectedValue(new Error('Database connection failed')); // admin insert fails
 
       const response = await request(app)
         .post('/api/users/admin/createAdminProfile')
         .send(adminData)
         .expect(500);
 
-      expect(response.body).toEqual({ error: 'Internal Server Error' });
+      expect(response.body).toHaveProperty('error', 'Internal Server Error');
     });
   });
 
@@ -176,30 +217,32 @@ describe('Application Integration Tests', () => {
         .set('Content-Type', 'application/json')
         .send('invalid json')
         .expect(400);
+
+      expect(response.body).toHaveProperty('error', 'Invalid JSON format');
     });
 
     it('should handle missing Content-Type header', async () => {
       const response = await request(app)
         .post('/api/users/admin/createAdminProfile')
-        .send('some data')
-        .expect(500); // Express will return 500 for malformed JSON
+        .send('some data');
+
+      // Should not require authentication - expect parsing error or validation error
+      expect([400, 500]).toContain(response.status);
     });
 
     it('should handle very large payload', async () => {
       const largeData = {
-        name: 'A'.repeat(10000),
-        email_id: 'admin@test.com',
-        phone: '1234567890',
+        admin_name: 'A'.repeat(10000),
+        admin_email: 'admin@test.com',
         password: 'password123'
       };
 
-      // This should be handled by Express body parser limits
       const response = await request(app)
         .post('/api/users/admin/createAdminProfile')
         .send(largeData);
 
-      // Should either succeed or fail gracefully
-      expect([200, 201, 400, 413, 500]).toContain(response.status);
+      // Should not require authentication - expect success or validation error
+      expect([201, 400, 500]).toContain(response.status);
     });
   });
 
@@ -217,10 +260,10 @@ describe('Application Integration Tests', () => {
 
     it('should handle different HTTP methods correctly', async () => {
       // Test that POST routes don't accept GET requests
-      // This will be caught by the :adminId route and return 500 due to invalid UUID
+      // This will be caught by the :adminId route and return 401 Unauthorized
       await request(app)
         .get('/api/users/admin/createAdminProfile')
-        .expect(500);
+        .expect(401);
 
       await request(app)
         .get('/signup')

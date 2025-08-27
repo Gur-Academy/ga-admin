@@ -2,6 +2,9 @@ module.exports = {
   // Test environment
   testEnvironment: 'node',
   
+  // Set NODE_ENV to test
+  setupFiles: ['<rootDir>/__test__/jest.setup.js'],
+  
   // Test file patterns
   testMatch: [
     '**/__test__/**/*.test.js',
