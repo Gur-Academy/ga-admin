@@ -26,9 +26,9 @@ __test__/
 
 ### 2. Route Tests (`routes/adminRoutes.test.js`)
 - Tests API endpoints using Supertest
-- Mocks controller functions to test route handling
-- Tests HTTP methods, status codes, and response formats
-- Validates request/response flow
+- Mocks controller functions to focus on router wiring (paths, methods, status pass-through)
+- Validates request/response flow and payload forwarding
+- Edge-case input validation is covered at the controller layer
 
 ### 3. Integration Tests (`integration/app.test.js`)
 - Tests the complete application flow
@@ -84,8 +84,34 @@ Coverage reports are generated in the `coverage/` directory.
 
 ### Supabase Mocks
 - Supabase Auth functions are mocked
+- Covered methods: `auth.admin.createUser`, `auth.signInWithPassword`
 - Tests both successful and failed authentication
 - Validates error message handling
+
+## Endpoint Contracts (key)
+
+### Admin Login `POST /api/users/admin/login`
+- **Required body fields**: `email`, `password`, `user_session_id`, `user_agent`
+- **Constraints**:
+  - `user_session_id` must be a UUID (v1–v5 accepted)
+  - If `user_session_id` already exists in `user_session` table → `409 { error: "USER_EXISTS" }`
+  - Invalid credentials → `401 { error: "Invalid credentials" }`
+  - Missing fields → `400 { error: 'Email, password, user_session_id, and user_agent are required' }`
+- **On success (200)**: persists `user_session` with `{ user_session_id, user_id, user_agent }`
+
+Example request:
+```json
+{
+  "email": "admin@example.com",
+  "password": "StrongP@ssw0rd!",
+  "user_session_id": "550e8400-e29b-41d4-a716-446655440000",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64)"
+}
+```
+
+### Admin Create Profile `POST /api/users/admin/createAdminProfile`
+- **Required body fields**: `admin_name`, `admin_email`, `admin_password`
+- Creates Supabase user (email confirmed), assigns `ADMIN` role in `user_role`, and inserts into `admins`
 
 ### Request/Response Mocks
 - Express request and response objects are mocked
@@ -96,26 +122,28 @@ Coverage reports are generated in the `coverage/` directory.
 
 ### Success Scenarios
 - ✅ Valid admin profile creation
-- ✅ Valid user signup
+- ✅ Valid admin login (with session persistence)
 - ✅ Database queries returning expected data
 - ✅ Proper response formatting
 
 ### Error Scenarios
-- ✅ Missing required fields
-- ✅ Invalid email formats
-- ✅ Duplicate email addresses
+- ✅ Missing required fields (controller layer)
+- ✅ Duplicate email addresses (create profile)
 - ✅ Database connection errors
 - ✅ Supabase authentication errors
-- ✅ Malformed JSON requests
-- ✅ Large payload handling
+- ✅ Invalid credentials (login)
+- ✅ Duplicate `user_session_id` → 409 (login)
 
 ### Edge Cases
 - ✅ Empty request bodies
 - ✅ Null/undefined values
 - ✅ Special characters in input
 - ✅ Concurrent requests
-- ✅ Different HTTP methods
-- ✅ Non-existent routes
+- ✅ Non-existent routes (router-level)
+
+## Notes on Layered Responsibilities
+- **Routes tests**: ensure correct path/method bindings and that requests reach controllers with the expected payloads.
+- **Controller tests**: enforce validation, UUID checks, DB interactions (`user_role`, `admins`, `user_session`), and error semantics (400/401/409/500).
 
 ## Best Practices
 

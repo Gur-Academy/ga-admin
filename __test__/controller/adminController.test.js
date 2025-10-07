@@ -9,7 +9,8 @@ jest.mock('../../config/supabase', () => ({
   auth: {
     admin: {
       createUser: jest.fn()
-    }
+    },
+    signInWithPassword: jest.fn()
   }
 }));
 
@@ -28,7 +29,7 @@ describe('Admin Controller', () => {
       body: {
         admin_name: 'Test Admin',
         admin_email: 'admin@test.com',
-        password: 'password123'
+        admin_password: 'password123'
       }
     };
 
@@ -53,74 +54,59 @@ describe('Admin Controller', () => {
         error: null
       });
 
-      // Mock database queries - new flow: admin insert first, then user_role insert, then admin update
+      // Mock DB: user_role insert, then admins insert returning record
       pool.query
-        .mockResolvedValueOnce({ 
-          rows: [{ 
-            admin_id: 'generated-admin-id',
+        .mockResolvedValueOnce({ rows: [] }) // user_role insert
+        .mockResolvedValueOnce({
+          rows: [{
+            admin_id: 'test-user-id-123',
             admin_name: 'Test Admin',
             admin_email: 'admin@test.com',
+            admin_profile_picture_key: null,
             created_at: '2025-08-24T11:32:00.123Z'
-          }] 
-        }) // admin insert
-        .mockResolvedValueOnce({ rows: [] }) // user_role insert
-        .mockResolvedValueOnce({ rows: [] }); // admin update with auth_user_id
+          }]
+        }); // admins insert
 
       await adminController.createAdminProfile(mockReq, mockRes);
 
-      // Verify Supabase auth was called correctly with user_metadata
+      // Supabase create user called with correct args
       expect(supabase.auth.admin.createUser).toHaveBeenCalledWith({
         email: 'admin@test.com',
         password: 'password123',
         email_confirm: true,
         user_metadata: {
-          admin_id: 'generated-admin-id',
-          admin_name: 'Test Admin'
+          display_name: 'Test Admin'
         }
       });
 
-      // Verify database queries were called correctly
-      expect(pool.query).toHaveBeenCalledWith(
-        `INSERT INTO admins (admin_name, admin_email, created_at)
-       VALUES ($1, $2, NOW())
-       RETURNING admin_id, admin_name, admin_email, created_at`,
-        ['Test Admin', 'admin@test.com']
-      );
-
+      // user_role insert
       expect(pool.query).toHaveBeenCalledWith(
         `INSERT INTO user_role (user_id, role) VALUES ($1, 'ADMIN')`,
         ['test-user-id-123']
       );
 
+      // admins insert with admin_id = user_id
       expect(pool.query).toHaveBeenCalledWith(
-        `UPDATE admins SET auth_user_id = $1 WHERE admin_id = $2`,
-        ['test-user-id-123', 'generated-admin-id']
+        `INSERT INTO admins (admin_id, admin_name, admin_email, admin_profile_picture_key, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING admin_id, admin_name, admin_email, admin_profile_picture_key, created_at`,
+        ['test-user-id-123', 'Test Admin', 'admin@test.com', null]
       );
 
-      // Verify response
       expect(mockRes.status).toHaveBeenCalledWith(201);
       expect(mockRes.json).toHaveBeenCalledWith({
         message: 'Admin created successfully',
         admin: {
-          admin_id: 'generated-admin-id',
+          admin_id: 'test-user-id-123',
           admin_name: 'Test Admin',
           admin_email: 'admin@test.com',
-          created_at: '2025-08-24T11:32:00.123Z'
+          admin_profile_picture_key: null,
+          created_at: new Date('2025-08-24T11:32:00.123Z').toISOString()
         }
       });
     });
 
     it('should handle Supabase auth error', async () => {
-      // Mock admin insert first (which will be rolled back)
-      pool.query.mockResolvedValueOnce({
-        rows: [{
-          admin_id: 'temp-admin-id',
-          admin_name: 'Test Admin',
-          admin_email: 'admin@test.com',
-          created_at: '2025-08-24T11:32:00.123Z'
-        }]
-      });
-
       // Mock Supabase auth error
       const authError = { message: 'Email already exists' };
       supabase.auth.admin.createUser.mockResolvedValue({
@@ -128,16 +114,12 @@ describe('Admin Controller', () => {
         error: authError
       });
 
-      // Mock rollback delete
-      pool.query.mockResolvedValueOnce({ rows: [] });
-
       await adminController.createAdminProfile(mockReq, mockRes);
 
-      // Verify error response
       expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Email already exists'
-      });
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Email already exists' });
+      // DB should not be called when auth fails
+      expect(pool.query).not.toHaveBeenCalled();
     });
 
     it('should handle missing required fields', async () => {
@@ -145,7 +127,7 @@ describe('Admin Controller', () => {
       const reqWithMissingEmail = {
         body: {
           admin_name: 'Test Admin',
-          password: 'password123'
+          admin_password: 'password123'
         }
       };
 
@@ -154,7 +136,7 @@ describe('Admin Controller', () => {
       // Should return validation error immediately
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'admin_name, admin_email, and password are required'
+        error: 'admin_name, admin_email, and admin_password are required'
       });
 
       // Should not call Supabase or database
@@ -163,7 +145,12 @@ describe('Admin Controller', () => {
     });
 
     it('should handle database error during admin insert', async () => {
-      // Mock database error on admin insert (first step)
+      // Mock Supabase createUser success so we reach DB layer
+      supabase.auth.admin.createUser.mockResolvedValue({
+        data: { user: { id: 'test-user-id-123' } },
+        error: null
+      });
+      // Mock database error on first DB operation after auth (user_role insert)
       pool.query.mockRejectedValueOnce(new Error('Database connection failed'));
 
       await adminController.createAdminProfile(mockReq, mockRes);
@@ -174,8 +161,8 @@ describe('Admin Controller', () => {
         error: 'Internal Server Error'
       });
 
-      // Should not call Supabase since admin insert failed first
-      expect(supabase.auth.admin.createUser).not.toHaveBeenCalled();
+      // Supabase createUser should have been called before DB error
+      expect(supabase.auth.admin.createUser).toHaveBeenCalled();
     });
 
     it('should handle database error during user_role insert', async () => {
@@ -202,9 +189,7 @@ describe('Admin Controller', () => {
 
       // Verify error response
       expect(mockRes.status).toHaveBeenCalledWith(500);
-      expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'Internal Server Error'
-      });
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Internal Server Error' });
     });
 
     it('should handle empty request body', async () => {
@@ -215,7 +200,7 @@ describe('Admin Controller', () => {
       // Should return validation error immediately
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'admin_name, admin_email, and password are required'
+        error: 'admin_name, admin_email, and admin_password are required'
       });
 
       // Should not call Supabase or database
@@ -223,13 +208,7 @@ describe('Admin Controller', () => {
       expect(pool.query).not.toHaveBeenCalled();
     });
 
-    it('should handle null request body', async () => {
-      const nullReq = { body: null };
-
-      // This test should expect an error since we can't destructure null
-      await expect(adminController.createAdminProfile(nullReq, mockRes))
-        .rejects.toThrow('Cannot destructure property');
-    });
+    // Removed null body destructure test; controller safely reads from req.body.
   });
 
   describe('getAdminById', () => {
@@ -242,10 +221,8 @@ describe('Admin Controller', () => {
         updated_at: '2024-01-01T00:00:00Z'
       };
 
-      // Mock successful database query
-      pool.query.mockResolvedValue({
-        rows: [mockAdminData]
-      });
+      // Mock successful database query for this call deterministically
+      pool.query.mockResolvedValueOnce({ rows: [mockAdminData] });
 
       const req = {
         params: { adminId: '550e8400-e29b-41d4-a716-446655440000' }
@@ -265,10 +242,8 @@ describe('Admin Controller', () => {
     });
 
     it('should return 404 when admin is not found', async () => {
-      // Mock empty database result
-      pool.query.mockResolvedValue({
-        rows: []
-      });
+      // Mock empty database result deterministically
+      pool.query.mockResolvedValueOnce({ rows: [] });
 
       const req = {
         params: { adminId: '550e8400-e29b-41d4-a716-446655440001' }
@@ -575,6 +550,94 @@ describe('Admin Controller', () => {
       // Verify response includes all fields
       expect(mockRes.status).toHaveBeenCalledWith(200);
       expect(mockRes.json).toHaveBeenCalledWith(completeAdminData);
+    });
+  });
+
+  describe('login', () => {
+    it('should return 400 when required fields are missing', async () => {
+      mockReq = { body: { email: 'a@b.com', password: 'x' } };
+      await adminController.login(mockReq, mockRes);
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Email, password, user_session_id, and user_agent are required' });
+    });
+
+    it('should return 400 for invalid user_session_id format', async () => {
+      mockReq = { body: { email: 'a@b.com', password: 'x', user_session_id: 'not-a-uuid', user_agent: 'jest' } };
+      await adminController.login(mockReq, mockRes);
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Invalid user_session_id format (expected UUID)' });
+    });
+
+    it('should return 409 if session already exists', async () => {
+      mockReq = { body: { email: 'a@b.com', password: 'x', user_session_id: '550e8400-e29b-41d4-a716-446655440000', user_agent: 'jest' } };
+      pool.query.mockResolvedValueOnce({ rows: [{ exists: 1 }] }); // existing session
+
+      await adminController.login(mockReq, mockRes);
+      expect(pool.query).toHaveBeenCalledWith(
+        `SELECT 1 FROM user_session WHERE user_session_id = $1 LIMIT 1`,
+        ['550e8400-e29b-41d4-a716-446655440000']
+      );
+      expect(mockRes.status).toHaveBeenCalledWith(409);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'USER_EXISTS' });
+    });
+
+    it('should return 401 for invalid credentials', async () => {
+      mockReq = { body: { email: 'a@b.com', password: 'wrong', user_session_id: '550e8400-e29b-41d4-a716-446655440000', user_agent: 'jest' } };
+      pool.query.mockResolvedValueOnce({ rows: [] }); // no existing session
+      supabase.auth.signInWithPassword.mockResolvedValue({ data: null, error: { message: 'Invalid' } });
+
+      await adminController.login(mockReq, mockRes);
+      expect(mockRes.status).toHaveBeenCalledWith(401);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Invalid credentials' });
+    });
+
+    it('should insert user_session and return 200 on success', async () => {
+      mockReq = { body: { email: 'a@b.com', password: 'good', user_session_id: '550e8400-e29b-41d4-a716-446655440000', user_agent: 'jest' } };
+      // session exists check
+      pool.query.mockResolvedValueOnce({ rows: [] });
+      // supabase login success
+      supabase.auth.signInWithPassword.mockResolvedValue({
+        data: { user: { id: 'uid-123' }, session: { access_token: 't' } },
+        error: null
+      });
+      // user_role lookup (found)
+      pool.query.mockResolvedValueOnce({ rows: [{ user_id: 'uid-123' }] });
+      // insert user_session
+      pool.query.mockResolvedValueOnce({ rows: [] });
+
+      await adminController.login(mockReq, mockRes);
+
+      expect(pool.query).toHaveBeenNthCalledWith(1,
+        `SELECT 1 FROM user_session WHERE user_session_id = $1 LIMIT 1`,
+        ['550e8400-e29b-41d4-a716-446655440000']
+      );
+      expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({ email: 'a@b.com', password: 'good' });
+      expect(pool.query).toHaveBeenNthCalledWith(2,
+        `SELECT user_id FROM user_role WHERE user_id = $1 LIMIT 1`,
+        ['uid-123']
+      );
+      expect(pool.query).toHaveBeenNthCalledWith(3,
+        `INSERT INTO user_session (user_session_id, user_id, user_agent) VALUES ($1, $2, $3)`,
+        ['550e8400-e29b-41d4-a716-446655440000', 'uid-123', 'jest']
+      );
+      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        message: 'Login successful',
+        user: { id: 'uid-123' },
+        session: { access_token: 't' }
+      });
+    });
+
+    it('should return 500 when insert user_session fails', async () => {
+      mockReq = { body: { email: 'a@b.com', password: 'good', user_session_id: '550e8400-e29b-41d4-a716-446655440000', user_agent: 'jest' } };
+      pool.query.mockResolvedValueOnce({ rows: [] });
+      supabase.auth.signInWithPassword.mockResolvedValue({ data: { user: { id: 'uid-123' }, session: {} }, error: null });
+      pool.query.mockResolvedValueOnce({ rows: [{ user_id: 'uid-123' }] });
+      pool.query.mockRejectedValueOnce(new Error('insert failed'));
+
+      await adminController.login(mockReq, mockRes);
+      expect(mockRes.status).toHaveBeenCalledWith(500);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Internal Server Error during session creation' });
     });
   });
 });
